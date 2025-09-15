@@ -1,20 +1,25 @@
 {
   "manifest_version": 3,
   "name": "Gmail Spam Scanner",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Scans opened emails in Gmail for potential spam.",
   "permissions": [
     "activeTab",
     "storage"
   ],
   "host_permissions": [
-    "https://mail.google.com/",
-    "http://127.0.0.1:8000/"
+    "https://mail.google.com/"
   ],
   "content_scripts": [
     {
       "matches": ["https://mail.google.com/*"],
-      "js": ["content_script.js"]
+      "js": ["spam_model.js", "content_script.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["spam-model.json"],
+      "matches": ["https://mail.google.com/*"]
     }
   ]
 }

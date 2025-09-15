@@ -1,10 +1,9 @@
-import joblib
+import joblib, json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import make_pipeline
 
-# 1. Sample Data (Replace with your actual dataset)
-# '1' represents spam, '0' represents not spam (ham)
+# Training data
 emails = [
     ("Win a free car now!", 1),
     ("URGENT: Your account needs verification", 1),
@@ -14,16 +13,27 @@ emails = [
     ("Your project update is due", 0)
 ]
 
-# Separate texts and labels
 texts, labels = zip(*emails)
 
-# 2. Create and Train the Model Pipeline
-# The pipeline first converts text into numerical vectors, then applies the classifier.
-model = make_pipeline(TfidfVectorizer(), MultinomialNB())
-model.fit(texts, labels)
+# Train pipeline
+pipeline = make_pipeline(TfidfVectorizer(), MultinomialNB())
+pipeline.fit(texts, labels)
 
-# 3. Save the Trained Model
-# We save the entire pipeline so we can use it for prediction later.
-joblib.dump(model, 'spam-model.joblib')
+# Save joblib if you still want it
+joblib.dump(pipeline, "spam-model.joblib")
 
-print("✅ Model trained and saved as spam-model.joblib")
+# Export as JSON for Chrome extension
+vectorizer = pipeline.named_steps['tfidfvectorizer']
+clf = pipeline.named_steps['multinomialnb']
+
+export_data = {
+    "vocabulary": vectorizer.vocabulary_,
+    "idf": vectorizer.idf_.tolist(),
+    "class_log_prior": clf.class_log_prior_.tolist(),
+    "feature_log_prob": clf.feature_log_prob_.tolist()
+}
+
+with open("spam-model.json", "w") as f:
+    json.dump(export_data, f)
+
+print("✅ Exported spam-model.json successfully")
