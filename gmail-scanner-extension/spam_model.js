@@ -1,13 +1,13 @@
 let spamModel = null;
 
-// Load the JSON model once
+// Load model parameters (spam-model.json)
 async function loadModel() {
   if (spamModel) return;
   const response = await fetch(chrome.runtime.getURL("spam-model.json"));
   spamModel = await response.json();
 }
 
-// Convert text into vector using the exported vocabulary
+// Convert email text → numeric vector
 function vectorize(text) {
   const tokens = text.toLowerCase().split(/\W+/);
   const vocab = spamModel.vocabulary;

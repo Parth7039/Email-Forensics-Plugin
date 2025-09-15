@@ -1,28 +1,35 @@
+import pandas as pd
 import joblib, json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import make_pipeline
 
-# Training data
-emails = [
-    ("Win a free car now!", 1),
-    ("URGENT: Your account needs verification", 1),
-    ("Hello, let's catch up tomorrow", 0),
-    ("Meeting minutes attached", 0),
-    ("Click here for a limited time offer", 1),
-    ("Your project update is due", 0)
-]
+# 1. Load base dataset
+df_base = pd.read_csv("emails.csv")  # columns: Category, Message
+df_base = df_base[["Message", "Category"]]
 
-texts, labels = zip(*emails)
+# 2. Load feedback if available
+try:
+    df_feedback = pd.read_csv("feedback.csv")  # same columns
+    df_feedback = df_feedback[["Message", "Category"]]
+    df_all = pd.concat([df_base, df_feedback], ignore_index=True)
+    print(f"✅ Merged dataset: {len(df_base)} base + {len(df_feedback)} feedback = {len(df_all)} total samples")
+except FileNotFoundError:
+    df_all = df_base
+    print(f"⚠️ No feedback.csv found, training only on base dataset ({len(df_base)} samples)")
 
-# Train pipeline
+# 3. Prepare texts and labels
+texts = df_all["Message"].astype(str).tolist()
+labels = df_all["Category"].apply(lambda x: 1 if x.lower() == "spam" else 0).tolist()
+
+# 4. Train pipeline
 pipeline = make_pipeline(TfidfVectorizer(), MultinomialNB())
 pipeline.fit(texts, labels)
 
-# Save joblib if you still want it
+# 5. Save joblib (optional)
 joblib.dump(pipeline, "spam-model.joblib")
 
-# Export as JSON for Chrome extension
+# 6. Export JSON for Chrome extension
 vectorizer = pipeline.named_steps['tfidfvectorizer']
 clf = pipeline.named_steps['multinomialnb']
 
