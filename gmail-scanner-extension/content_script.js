@@ -200,7 +200,6 @@ function showFeedbackPopup(state, confidence, emailText) {
   });
 }
 
-
 function hideFeedbackPopup() {
   if (feedbackPopup) {
     feedbackPopup.style.opacity = "0";

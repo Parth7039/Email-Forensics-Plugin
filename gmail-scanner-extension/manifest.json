@@ -1,16 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Gmail Spam Scanner",
-  "version": "1.3",
-  "description": "Scans Gmail emails for potential spam using a local ML model.",
+  "version": "1.5",
   "permissions": [
     "activeTab",
     "storage",
     "downloads",
-    "contextMenus"
+    "contextMenus",
+    "identity"
   ],
   "host_permissions": [
-    "https://mail.google.com/*"
+    "https://mail.google.com/*",
+    "https://www.googleapis.com/*",
+    "https://ipapi.co/*",
+    "https://ip-api.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -21,9 +24,15 @@
       "js": ["spam_model.js", "content_script.js"]
     }
   ],
+  "oauth2": {
+    "client_id": "155308939973-92mtu4e8mosho9fmjp5pvagvnp79a2vi.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
+  },
   "web_accessible_resources": [
     {
-      "resources": ["spam-model.json", "emails.csv"],
+      "resources": ["spam-model.json"],
       "matches": ["https://mail.google.com/*"]
     }
   ]
