@@ -3,6 +3,7 @@ import joblib, json
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import make_pipeline
+import numpy as np
 
 # 1. Load base dataset
 df_base = pd.read_csv("emails.csv")  # columns: Category, Message
@@ -41,6 +42,28 @@ export_data = {
 }
 
 with open("spam-model.json", "w") as f:
-    json.dump(export_data, f)
+    json.dump(export_data, f, indent=2)
 
 print("✅ Exported spam-model.json successfully")
+
+# 7. Calculate suspicious words (spam-indicative words)
+word_scores = []
+vocab = vectorizer.vocabulary_
+feature_log_prob = clf.feature_log_prob_  # [ham, spam]
+
+for word, idx in vocab.items():
+    score = feature_log_prob[1][idx] - feature_log_prob[0][idx]  # spam - ham
+    word_scores.append((word, score))
+
+# Sort by spam score descending
+word_scores.sort(key=lambda x: x[1], reverse=True)
+
+print("\nTop 50 suspicious words:")
+for word, score in word_scores[:50]:
+    print(word, f"{score:.3f}")
+
+# 8. Optional: save suspicious words JSON
+suspicious_words_json = [{"word": w, "score": s} for w, s in word_scores]
+with open("suspicious-words.json", "w") as f:
+    json.dump(suspicious_words_json, f, indent=2)
+print("✅ Saved suspicious-words.json for reference")

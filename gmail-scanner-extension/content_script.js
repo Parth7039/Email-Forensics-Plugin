@@ -15,16 +15,19 @@ function displayResult(emailBodyElement, state, apiResult = null) {
     chip.id = existingBannerId;
     chip.style.cssText = `
       display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 6px 10px;
       margin-left: 12px;
-      border-radius: 16px;
+      border-radius: 10px;
       font-size: 12px;
       font-weight: 500;
       font-family: Roboto, Arial, sans-serif;
-      line-height: 1.5;
+      line-height: 1.4;
       box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       transition: all 0.2s ease-in-out;
+      max-width: 360px;
+      word-break: break-word;
     `;
     header.appendChild(chip);
   }
@@ -38,17 +41,39 @@ function displayResult(emailBodyElement, state, apiResult = null) {
       chip.style.color = "#1565c0";
       hideFeedbackPopup();
       break;
+
     case "spam":
-      chip.textContent = `⚠️ Likely Spam (${Math.round(apiResult.confidence * 100)}%)`;
-      chip.style.backgroundColor = "#ffcdd2";
-      chip.style.color = "#c62828";
-      showFeedbackPopup(state, apiResult.confidence, emailBodyElement.innerText);
-      break;
     case "safe":
-      chip.textContent = `✅ Looks Safe (${Math.round(apiResult.confidence * 100)}%)`;
-      chip.style.backgroundColor = "#c8e6c9";
-      chip.style.color = "#2e7d32";
-      showFeedbackPopup(state, apiResult.confidence, emailBodyElement.innerText);
+      const isSpam = state === "spam";
+      const confidencePercent = Math.round(apiResult.confidence * 100);
+      const words = apiResult.influentialWords?.length
+        ? apiResult.influentialWords.join(", ")
+        : "N/A";
+      const reason = apiResult.reason || "No specific reason detected.";
+
+      chip.innerHTML = `
+        <div style="margin-bottom: 4px;">
+          ${isSpam ? "⚠️ Likely Spam" : "✅ Looks Safe"} (${confidencePercent}%)
+        </div>
+        <div style="
+          font-size: 11px;
+          font-weight: 400;
+          color: ${isSpam ? "#b71c1c" : "#1b5e20"};
+        ">
+          <b>Reason:</b> ${reason}<br>
+          <b>Key Words:</b> ${words}
+        </div>
+      `;
+
+      chip.style.backgroundColor = isSpam ? "#ffcdd2" : "#c8e6c9";
+      chip.style.color = isSpam ? "#c62828" : "#2e7d32";
+      showFeedbackPopup(
+        state,
+        apiResult.confidence,
+        emailBodyElement.innerText,
+        reason,
+        apiResult.influentialWords
+      );
       break;
   }
 }
@@ -62,7 +87,11 @@ async function scanEmail(emailBodyElement) {
   const emailText = emailBodyElement.innerText;
 
   if (emailText.length < 50) {
-    displayResult(emailBodyElement, "safe", { confidence: 1.0 });
+    displayResult(emailBodyElement, "safe", {
+      confidence: 1.0,
+      reason: "Short message – unlikely to be spam.",
+      influentialWords: [],
+    });
     return;
   }
 
@@ -118,7 +147,7 @@ function createFeedbackPopup() {
     flexDirection: "column",
     alignItems: "center",
     gap: "12px",
-    minWidth: "220px",
+    minWidth: "260px",
     transition: "opacity 0.3s ease, transform 0.3s ease",
     opacity: "0",
     transform: "translateY(-10px)",
@@ -178,18 +207,29 @@ function closeButtonStyle() {
 }
 
 // --- Show/Hide Popup ---
-function showFeedbackPopup(state, confidence, emailText) {
+function showFeedbackPopup(state, confidence, emailText, reason = "", words = []) {
   if (!feedbackPopup) createFeedbackPopup();
 
   const messageDiv = feedbackPopup.querySelector("#feedback-message");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
 
-  messageDiv.textContent = `Was this prediction (${state} - ${Math.round(
-    confidence * 100
-  )}%) accurate?`;
+  const confidencePercent = Math.round(confidence * 100);
+  const wordList = Array.isArray(words) ? words.join(", ") : words;
+
+  messageDiv.innerHTML = `
+    <div style="font-weight: 500; text-align: center; color: #333;">
+      Was this prediction (<b>${state}</b> - ${confidencePercent}%) accurate?
+    </div>
+    <div style="margin-top: 8px; font-size: 13px; color: #444; text-align: left;">
+      <b>Reason:</b> ${reason || "N/A"}<br>
+      <b>Key Words:</b> ${wordList || "N/A"}
+    </div>
+  `;
 
   feedbackPopup.dataset.emailText = emailText;
-  feedbackPopup.dataset.prediction = state; // 👈 store model prediction here
+  feedbackPopup.dataset.prediction = state;
+  feedbackPopup.dataset.reason = reason;
+  feedbackPopup.dataset.words = wordList;
 
   buttonsContainer.style.display = "flex";
 
@@ -206,39 +246,41 @@ function hideFeedbackPopup() {
     feedbackPopup.style.transform = "translateY(-20px)";
     setTimeout(() => {
       feedbackPopup.style.display = "none";
-    }, 300000); // smooth hide after animation
+    }, 1000000);
   }
 }
 
 // --- Handle Feedback ---
 function handleFeedbackClick(event) {
-  const feedback = event.target.dataset.feedback; // "correct" or "incorrect"
+  const feedback = event.target.dataset.feedback;
   const emailText = feedbackPopup.dataset.emailText || "";
-  const prediction = feedbackPopup.dataset.prediction || "unknown"; // store what model predicted
+  const prediction = feedbackPopup.dataset.prediction || "unknown";
+  const reason = feedbackPopup.dataset.reason || "";
+  const keywords = feedbackPopup.dataset.words || "";
 
-  console.log(
-    `📩 Feedback received: "${feedback}" for email ID ${currentScannedEmailId}, prediction was "${prediction}"`
-  );
+  console.log(`📩 Feedback: "${feedback}" (Prediction: "${prediction}")`);
 
-  // Save feedback into chrome.storage.local
   chrome.storage.local.get({ feedbackData: [] }, (data) => {
     const feedbackData = data.feedbackData;
     feedbackData.push({
       text: emailText,
-      prediction: prediction,   // what model said ("spam" or "ham")
-      feedback: feedback        // user response ("correct" / "incorrect")
+      prediction,
+      feedback,
+      reason,
+      keywords,
     });
 
     chrome.storage.local.set({ feedbackData }, () => {
       console.log("✅ Feedback saved:", {
         text: emailText,
         prediction,
-        feedback
+        feedback,
+        reason,
+        keywords,
       });
     });
   });
 
-  // Show thank you message
   const feedbackMessage = feedbackPopup.querySelector("#feedback-message");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
   feedbackMessage.textContent = "Thanks for your feedback!";

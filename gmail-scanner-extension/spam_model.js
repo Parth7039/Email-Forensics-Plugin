@@ -34,5 +34,27 @@ function predict(text) {
   const norm = expScores.map(v => v / sumExp);
 
   const isSpam = norm[1] > norm[0];
-  return { is_spam: isSpam, confidence: isSpam ? norm[1] : norm[0] };
+
+  // --- Compute influential words ---
+  const influentialWords = [];
+  const vocabKeys = Object.keys(spamModel.vocabulary);
+  x.forEach((count, idx) => {
+    if (count > 0) {
+      const word = vocabKeys.find(key => spamModel.vocabulary[key] === idx);
+      const contribution = (spamModel.feature_log_prob[1][idx] - spamModel.feature_log_prob[0][idx]) * count;
+      influentialWords.push({ word, contribution });
+    }
+  });
+
+  // Sort by contribution descending and take top 10
+  influentialWords.sort((a, b) => b.contribution - a.contribution);
+  const topWords = influentialWords.slice(0, 10).map(w => w.word);
+
+  return {
+    is_spam: isSpam,
+    confidence: isSpam ? norm[1] : norm[0],
+    influentialWords: topWords,
+    reason: isSpam ? "High presence of suspicious words" : "No significant suspicious words"
+  };
 }
+
