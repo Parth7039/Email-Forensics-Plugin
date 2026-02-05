@@ -1,4 +1,9 @@
-console.log("✅ Gmail Spam Scanner (Local Model) Loaded!");
+console.log("✅ Gmail Spam Scanner (Server-Based) Loaded!");
+
+// ============= SERVER CONFIGURATION =============
+const API_URL = "http://localhost:8000/analyze-email";
+// For production, change to: "https://your-domain.com/analyze-email"
+// ===============================================
 
 const EMAIL_BODY_SELECTOR = "div.gs";
 let currentScannedEmailId = null;
@@ -39,40 +44,142 @@ function displayResult(emailBodyElement, state, apiResult = null) {
       hideFeedbackPopup();
       break;
     case "spam":
-      chip.textContent = `⚠️ Likely Spam (${Math.round(apiResult.confidence * 100)}%)`;
+      const spamPercent = Math.round(apiResult.spam_probability * 100);
+      chip.textContent = `⚠️ Likely Spam (${spamPercent}%)`;
       chip.style.backgroundColor = "#ffcdd2";
       chip.style.color = "#c62828";
-      showFeedbackPopup(state, apiResult.confidence, emailBodyElement.innerText);
+      showFeedbackPopup(state, apiResult.spam_probability, emailBodyElement.innerText, apiResult);
       break;
     case "safe":
-      chip.textContent = `✅ Looks Safe (${Math.round(apiResult.confidence * 100)}%)`;
+      const safePercent = Math.round((1 - apiResult.spam_probability) * 100);
+      chip.textContent = `✅ Looks Safe (${safePercent}%)`;
       chip.style.backgroundColor = "#c8e6c9";
       chip.style.color = "#2e7d32";
-      showFeedbackPopup(state, apiResult.confidence, emailBodyElement.innerText);
+      showFeedbackPopup(state, apiResult.spam_probability, emailBodyElement.innerText, apiResult);
+      break;
+    case "error":
+      chip.textContent = "⚠️ Server Error";
+      chip.style.backgroundColor = "#fff3cd";
+      chip.style.color = "#856404";
       break;
   }
 }
 
-// --- Scanning ---
+// --- Get Email Subject ---
+function getEmailSubject() {
+  const subjectElement = document.querySelector('h2.hP');
+  if (subjectElement) {
+    return subjectElement.innerText.trim();
+  }
+  
+  const altSelectors = [
+    'h2[data-legacy-thread-id]',
+    '.hP',
+    'h2.Subject'
+  ];
+  
+  for (const selector of altSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      return element.innerText.trim();
+    }
+  }
+  
+  return "";
+}
+
+// --- Scanning with Server API ---
 async function scanEmail(emailBodyElement) {
   emailBodyElement.dataset.scannerId = Date.now() + Math.random();
   currentScannedEmailId = emailBodyElement.dataset.scannerId;
   displayResult(emailBodyElement, "loading");
 
-  const emailText = emailBodyElement.innerText;
+  const emailBody = emailBodyElement.innerText.trim();
+  const emailSubject = getEmailSubject();
 
-  if (emailText.length < 50) {
-    displayResult(emailBodyElement, "safe", { confidence: 1.0 });
+  // Skip very short emails
+  if (emailBody.length < 50 && emailSubject.length < 10) {
+    displayResult(emailBodyElement, "safe", { 
+      spam_probability: 0.1,
+      result: "SAFE",
+      confidence: "HIGH"
+    });
     return;
   }
 
   try {
-    await loadModel(); // from spam_model.js
-    const result = predict(emailText); // local inference
-    displayResult(emailBodyElement, result.is_spam ? "spam" : "safe", result);
+    console.log("📧 Sending email to server for analysis...");
+    console.log("Subject:", emailSubject.substring(0, 50));
+    console.log("Body length:", emailBody.length);
+
+    // Call FastAPI server
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        subject: emailSubject,
+        body: emailBody
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log("✅ Server response:", result);
+
+    // Check for API error
+    if (result.error) {
+      throw new Error(result.message || "Server returned an error");
+    }
+
+    // Display result based on server response
+    const isSpam = result.result === "SPAM";
+    displayResult(emailBodyElement, isSpam ? "spam" : "safe", result);
+
   } catch (error) {
     console.error("❌ Failed to scan email:", error);
+    displayResult(emailBodyElement, "error");
+    
+    // Show connection error notification
+    showConnectionError(error.message);
   }
+}
+
+// --- Show Connection Error ---
+function showConnectionError(message) {
+  const errorNotification = document.createElement("div");
+  errorNotification.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    padding: 15px 20px;
+    background-color: #ff9800;
+    color: white;
+    border-radius: 8px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    z-index: 10000;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-width: 300px;
+  `;
+  errorNotification.innerHTML = `
+    <strong>⚠️ Server Connection Error</strong><br>
+    <span style="font-size: 12px;">${message}</span><br>
+    <span style="font-size: 11px; margin-top: 5px; display: block;">
+      Make sure FastAPI server is running at ${API_URL}
+    </span>
+  `;
+  
+  document.body.appendChild(errorNotification);
+  
+  setTimeout(() => {
+    errorNotification.style.opacity = '0';
+    setTimeout(() => errorNotification.remove(), 300);
+  }, 5000);
 }
 
 // --- Mutation Observer ---
@@ -118,7 +225,7 @@ function createFeedbackPopup() {
     flexDirection: "column",
     alignItems: "center",
     gap: "12px",
-    minWidth: "220px",
+    minWidth: "280px",
     transition: "opacity 0.3s ease, transform 0.3s ease",
     opacity: "0",
     transform: "translateY(-10px)",
@@ -126,6 +233,7 @@ function createFeedbackPopup() {
 
   feedbackPopup.innerHTML = `
     <div id="feedback-message" style="font-weight: 500; text-align: center; color: #333;"></div>
+    <div id="feedback-details" style="font-size: 12px; color: #666; text-align: center;"></div>
     <div id="feedback-buttons-container" style="display: flex; gap: 10px;">
       <button class="feedback-action-btn" data-feedback="correct" style="${feedbackButtonStyle(
         "success"
@@ -178,18 +286,26 @@ function closeButtonStyle() {
 }
 
 // --- Show/Hide Popup ---
-function showFeedbackPopup(state, confidence, emailText) {
+function showFeedbackPopup(state, probability, emailText, apiResult) {
   if (!feedbackPopup) createFeedbackPopup();
 
   const messageDiv = feedbackPopup.querySelector("#feedback-message");
+  const detailsDiv = feedbackPopup.querySelector("#feedback-details");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
 
-  messageDiv.textContent = `Was this prediction (${state} - ${Math.round(
-    confidence * 100
-  )}%) accurate?`;
+  const percentage = Math.round(probability * 100);
+  messageDiv.textContent = `Was this prediction accurate?`;
+  
+  // Show additional details from API
+  let detailsText = `${state.toUpperCase()} - ${percentage}% confidence`;
+  if (apiResult.suspicious_keywords && apiResult.suspicious_keywords.length > 0) {
+    detailsText += `\nKeywords: ${apiResult.suspicious_keywords.slice(0, 3).join(', ')}`;
+  }
+  detailsDiv.textContent = detailsText;
 
   feedbackPopup.dataset.emailText = emailText;
-  feedbackPopup.dataset.prediction = state; // 👈 store model prediction here
+  feedbackPopup.dataset.prediction = state;
+  feedbackPopup.dataset.apiResult = JSON.stringify(apiResult);
 
   buttonsContainer.style.display = "flex";
 
@@ -200,14 +316,13 @@ function showFeedbackPopup(state, confidence, emailText) {
   });
 }
 
-
 function hideFeedbackPopup() {
   if (feedbackPopup) {
     feedbackPopup.style.opacity = "0";
     feedbackPopup.style.transform = "translateY(-20px)";
     setTimeout(() => {
       feedbackPopup.style.display = "none";
-    }, 300000); // smooth hide after animation
+    }, 300);
   }
 }
 
@@ -215,7 +330,15 @@ function hideFeedbackPopup() {
 function handleFeedbackClick(event) {
   const feedback = event.target.dataset.feedback; // "correct" or "incorrect"
   const emailText = feedbackPopup.dataset.emailText || "";
-  const prediction = feedbackPopup.dataset.prediction || "unknown"; // store what model predicted
+  const prediction = feedbackPopup.dataset.prediction || "unknown";
+  const apiResultStr = feedbackPopup.dataset.apiResult || "{}";
+  
+  let apiResult = {};
+  try {
+    apiResult = JSON.parse(apiResultStr);
+  } catch (e) {
+    console.error("Failed to parse API result:", e);
+  }
 
   console.log(
     `📩 Feedback received: "${feedback}" for email ID ${currentScannedEmailId}, prediction was "${prediction}"`
@@ -226,23 +349,32 @@ function handleFeedbackClick(event) {
     const feedbackData = data.feedbackData;
     feedbackData.push({
       text: emailText,
-      prediction: prediction,   // what model said ("spam" or "ham")
-      feedback: feedback        // user response ("correct" / "incorrect")
+      prediction: prediction,
+      feedback: feedback,
+      spam_probability: apiResult.spam_probability || 0,
+      confidence: apiResult.confidence || "UNKNOWN",
+      suspicious_keywords: apiResult.suspicious_keywords || [],
+      model_used: apiResult.model_used || "Unknown",
+      timestamp: new Date().toISOString()
     });
 
     chrome.storage.local.set({ feedbackData }, () => {
       console.log("✅ Feedback saved:", {
-        text: emailText,
+        text: emailText.substring(0, 100),
         prediction,
-        feedback
+        feedback,
+        spam_probability: apiResult.spam_probability
       });
     });
   });
 
   // Show thank you message
   const feedbackMessage = feedbackPopup.querySelector("#feedback-message");
+  const feedbackDetails = feedbackPopup.querySelector("#feedback-details");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
+  
   feedbackMessage.textContent = "Thanks for your feedback!";
+  feedbackDetails.textContent = "Your feedback helps improve the model";
   buttonsContainer.style.display = "none";
 
   setTimeout(hideFeedbackPopup, 1500);
@@ -277,3 +409,16 @@ document.body.addEventListener("click", (e) => {
     hideFeedbackPopup();
   }
 });
+
+// --- Scan current email if already open ---
+setTimeout(() => {
+  const currentEmailBody = document.querySelector(EMAIL_BODY_SELECTOR);
+  if (currentEmailBody && !currentEmailBody.dataset.scanComplete) {
+    currentEmailBody.setAttribute("data-scan-complete", "true");
+    console.log("📬 Email already open, scanning...");
+    scanEmail(currentEmailBody);
+  }
+}, 2000);
+
+console.log("✅ Gmail Spam Scanner initialized with server connection!");
+console.log("🔗 API URL:", API_URL);
