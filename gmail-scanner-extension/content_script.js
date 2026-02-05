@@ -125,7 +125,6 @@ function formatKeywords(keywords) {
   const displayKeywords = keywords.slice(0, 10);
   return displayKeywords.join(", ");
 }
-}
 
 // --- Get Email Subject ---
 function getEmailSubject() {
