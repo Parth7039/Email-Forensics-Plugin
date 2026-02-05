@@ -20,16 +20,19 @@ function displayResult(emailBodyElement, state, apiResult = null) {
     chip.id = existingBannerId;
     chip.style.cssText = `
       display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 6px 10px;
       margin-left: 12px;
-      border-radius: 16px;
+      border-radius: 10px;
       font-size: 12px;
       font-weight: 500;
       font-family: Roboto, Arial, sans-serif;
-      line-height: 1.5;
+      line-height: 1.4;
       box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       transition: all 0.2s ease-in-out;
+      max-width: 360px;
+      word-break: break-word;
     `;
     header.appendChild(chip);
   }
@@ -43,7 +46,9 @@ function displayResult(emailBodyElement, state, apiResult = null) {
       chip.style.color = "#1565c0";
       hideFeedbackPopup();
       break;
+
     case "spam":
+<<<<<<< HEAD
       const spamPercent = Math.round(apiResult.spam_probability * 100);
       chip.textContent = `⚠️ Likely Spam (${spamPercent}%)`;
       chip.style.backgroundColor = "#ffcdd2";
@@ -61,6 +66,39 @@ function displayResult(emailBodyElement, state, apiResult = null) {
       chip.textContent = "⚠️ Server Error";
       chip.style.backgroundColor = "#fff3cd";
       chip.style.color = "#856404";
+=======
+    case "safe":
+      const isSpam = state === "spam";
+      const confidencePercent = Math.round(apiResult.confidence * 100);
+      const words = apiResult.influentialWords?.length
+        ? apiResult.influentialWords.join(", ")
+        : "N/A";
+      const reason = apiResult.reason || "No specific reason detected.";
+
+      chip.innerHTML = `
+        <div style="margin-bottom: 4px;">
+          ${isSpam ? "⚠️ Likely Spam" : "✅ Looks Safe"} (${confidencePercent}%)
+        </div>
+        <div style="
+          font-size: 11px;
+          font-weight: 400;
+          color: ${isSpam ? "#b71c1c" : "#1b5e20"};
+        ">
+          <b>Reason:</b> ${reason}<br>
+          <b>Key Words:</b> ${words}
+        </div>
+      `;
+
+      chip.style.backgroundColor = isSpam ? "#ffcdd2" : "#c8e6c9";
+      chip.style.color = isSpam ? "#c62828" : "#2e7d32";
+      showFeedbackPopup(
+        state,
+        apiResult.confidence,
+        emailBodyElement.innerText,
+        reason,
+        apiResult.influentialWords
+      );
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
       break;
   }
 }
@@ -97,12 +135,20 @@ async function scanEmail(emailBodyElement) {
   const emailBody = emailBodyElement.innerText.trim();
   const emailSubject = getEmailSubject();
 
+<<<<<<< HEAD
   // Skip very short emails
   if (emailBody.length < 50 && emailSubject.length < 10) {
     displayResult(emailBodyElement, "safe", { 
       spam_probability: 0.1,
       result: "SAFE",
       confidence: "HIGH"
+=======
+  if (emailText.length < 50) {
+    displayResult(emailBodyElement, "safe", {
+      confidence: 1.0,
+      reason: "Short message – unlikely to be spam.",
+      influentialWords: [],
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
     });
     return;
   }
@@ -225,7 +271,11 @@ function createFeedbackPopup() {
     flexDirection: "column",
     alignItems: "center",
     gap: "12px",
+<<<<<<< HEAD
     minWidth: "280px",
+=======
+    minWidth: "260px",
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
     transition: "opacity 0.3s ease, transform 0.3s ease",
     opacity: "0",
     transform: "translateY(-10px)",
@@ -286,13 +336,18 @@ function closeButtonStyle() {
 }
 
 // --- Show/Hide Popup ---
+<<<<<<< HEAD
 function showFeedbackPopup(state, probability, emailText, apiResult) {
+=======
+function showFeedbackPopup(state, confidence, emailText, reason = "", words = []) {
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
   if (!feedbackPopup) createFeedbackPopup();
 
   const messageDiv = feedbackPopup.querySelector("#feedback-message");
   const detailsDiv = feedbackPopup.querySelector("#feedback-details");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
 
+<<<<<<< HEAD
   const percentage = Math.round(probability * 100);
   messageDiv.textContent = `Was this prediction accurate?`;
   
@@ -306,6 +361,25 @@ function showFeedbackPopup(state, probability, emailText, apiResult) {
   feedbackPopup.dataset.emailText = emailText;
   feedbackPopup.dataset.prediction = state;
   feedbackPopup.dataset.apiResult = JSON.stringify(apiResult);
+=======
+  const confidencePercent = Math.round(confidence * 100);
+  const wordList = Array.isArray(words) ? words.join(", ") : words;
+
+  messageDiv.innerHTML = `
+    <div style="font-weight: 500; text-align: center; color: #333;">
+      Was this prediction (<b>${state}</b> - ${confidencePercent}%) accurate?
+    </div>
+    <div style="margin-top: 8px; font-size: 13px; color: #444; text-align: left;">
+      <b>Reason:</b> ${reason || "N/A"}<br>
+      <b>Key Words:</b> ${wordList || "N/A"}
+    </div>
+  `;
+
+  feedbackPopup.dataset.emailText = emailText;
+  feedbackPopup.dataset.prediction = state;
+  feedbackPopup.dataset.reason = reason;
+  feedbackPopup.dataset.words = wordList;
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
 
   buttonsContainer.style.display = "flex";
 
@@ -322,15 +396,20 @@ function hideFeedbackPopup() {
     feedbackPopup.style.transform = "translateY(-20px)";
     setTimeout(() => {
       feedbackPopup.style.display = "none";
+<<<<<<< HEAD
     }, 300);
+=======
+    }, 1000000);
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
   }
 }
 
 // --- Handle Feedback ---
 function handleFeedbackClick(event) {
-  const feedback = event.target.dataset.feedback; // "correct" or "incorrect"
+  const feedback = event.target.dataset.feedback;
   const emailText = feedbackPopup.dataset.emailText || "";
   const prediction = feedbackPopup.dataset.prediction || "unknown";
+<<<<<<< HEAD
   const apiResultStr = feedbackPopup.dataset.apiResult || "{}";
   
   let apiResult = {};
@@ -339,16 +418,18 @@ function handleFeedbackClick(event) {
   } catch (e) {
     console.error("Failed to parse API result:", e);
   }
+=======
+  const reason = feedbackPopup.dataset.reason || "";
+  const keywords = feedbackPopup.dataset.words || "";
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
 
-  console.log(
-    `📩 Feedback received: "${feedback}" for email ID ${currentScannedEmailId}, prediction was "${prediction}"`
-  );
+  console.log(`📩 Feedback: "${feedback}" (Prediction: "${prediction}")`);
 
-  // Save feedback into chrome.storage.local
   chrome.storage.local.get({ feedbackData: [] }, (data) => {
     const feedbackData = data.feedbackData;
     feedbackData.push({
       text: emailText,
+<<<<<<< HEAD
       prediction: prediction,
       feedback: feedback,
       spam_probability: apiResult.spam_probability || 0,
@@ -356,6 +437,12 @@ function handleFeedbackClick(event) {
       suspicious_keywords: apiResult.suspicious_keywords || [],
       model_used: apiResult.model_used || "Unknown",
       timestamp: new Date().toISOString()
+=======
+      prediction,
+      feedback,
+      reason,
+      keywords,
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
     });
 
     chrome.storage.local.set({ feedbackData }, () => {
@@ -363,12 +450,16 @@ function handleFeedbackClick(event) {
         text: emailText.substring(0, 100),
         prediction,
         feedback,
+<<<<<<< HEAD
         spam_probability: apiResult.spam_probability
+=======
+        reason,
+        keywords,
+>>>>>>> 698cba0e75c62a2f860883700e9eb31a46963ecf
       });
     });
   });
 
-  // Show thank you message
   const feedbackMessage = feedbackPopup.querySelector("#feedback-message");
   const feedbackDetails = feedbackPopup.querySelector("#feedback-details");
   const buttonsContainer = feedbackPopup.querySelector("#feedback-buttons-container");
