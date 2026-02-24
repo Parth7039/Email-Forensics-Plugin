@@ -12,12 +12,103 @@ const SUSPICIOUS_TLDS = [
 
 // ============= TRUSTED DOMAINS =============
 const TRUSTED_DOMAINS = [
-  'google.com', 'gmail.com', 'youtube.com',
-  'facebook.com', 'amazon.com', 'microsoft.com',
-  'apple.com', 'twitter.com', 'linkedin.com',
-  'github.com', 'stackoverflow.com', 'reddit.com',
-  'wikipedia.org', 'paypal.com', 'ebay.com',
-  'netflix.com', 'adobe.com', 'yahoo.com'
+  // Major Tech Companies
+  'google.com', 'gmail.com', 'youtube.com', 'google.co.in',
+  'facebook.com', 'instagram.com', 'whatsapp.com', 'meta.com',
+  'amazon.com', 'amazon.in', 'amazon.co.uk',
+  'microsoft.com', 'outlook.com', 'office.com', 'live.com',
+  'apple.com', 'icloud.com',
+  'twitter.com', 'x.com',
+  'linkedin.com',
+  'github.com', 'gitlab.com',
+  'stackoverflow.com', 'stackexchange.com',
+  'reddit.com',
+  'wikipedia.org', 'wikimedia.org',
+  
+  // E-commerce & Payment
+  'paypal.com',
+  'ebay.com', 'ebay.in',
+  'flipkart.com',
+  'myntra.com',
+  'paytm.com',
+  'phonepe.com',
+  'gpay.com',
+  'razorpay.com',
+  'stripe.com',
+  
+  // Banking & Financial (India)
+  'sbi.co.in',
+  'hdfcbank.com',
+  'icicibank.com',
+  'axisbank.com',
+  'kotak.com',
+  'yesbank.in',
+  'pnbindia.in',
+  'bankofbaroda.in',
+  'rbi.org.in',
+  
+  // Government (India)
+  'india.gov.in',
+  'gov.in',
+  'uidai.gov.in',
+  'epfindia.gov.in',
+  'incometax.gov.in',
+  'gst.gov.in',
+  'mygov.in',
+  'digilocker.gov.in',
+  
+  // IT Companies (India)
+  'tcs.com',
+  'infosys.com',
+  'wipro.com',
+  'hcl.com',
+  'techmahindra.com',
+  'ltimindtree.com',
+  
+  // Streaming & Entertainment
+  'netflix.com',
+  'spotify.com',
+  'hotstar.com',
+  'primevideo.com',
+  'zee5.com',
+  'sonyliv.com',
+  
+  // Education & Productivity
+  'coursera.org',
+  'udemy.com',
+  'zoom.us',
+  'teams.microsoft.com',
+  'meet.google.com',
+  'slack.com',
+  'notion.so',
+  'trello.com',
+  
+  // Cloud & Development
+  'aws.amazon.com',
+  'azure.microsoft.com',
+  'cloud.google.com',
+  'digitalocean.com',
+  'heroku.com',
+  'vercel.com',
+  'netlify.com',
+  
+  // News & Media
+  'bbc.com', 'bbc.co.uk',
+  'cnn.com',
+  'reuters.com',
+  'theguardian.com',
+  'timesofindia.com',
+  'hindustantimes.com',
+  'indianexpress.com',
+  'ndtv.com',
+  
+  // Other Popular Services
+  'adobe.com',
+  'dropbox.com',
+  'yahoo.com',
+  'wordpress.com',
+  'medium.com',
+  'quora.com'
 ];
 
 // ============= URL SHORTENERS =============
@@ -152,6 +243,18 @@ function analyzeUrl(url, anchorText) {
   try {
     const urlObj = new URL(url);
     
+    // ============= CHECK IF DOMAIN IS TRUSTED =============
+    // Skip analysis for trusted domains
+    const cleanHostname = urlObj.hostname.toLowerCase().replace(/^www\./, '');
+    
+    for (const trustedDomain of TRUSTED_DOMAINS) {
+      if (cleanHostname === trustedDomain || cleanHostname.endsWith('.' + trustedDomain)) {
+        console.log(`✅ Trusted domain detected: ${cleanHostname}`);
+        return analysis; // Return as safe, skip all checks
+      }
+    }
+    // =====================================================
+    
     // 1. Check for IP address instead of domain
     if (isIpAddress(urlObj.hostname)) {
       analysis.reasons.push("⚠️ Uses IP address instead of domain name");
@@ -255,11 +358,28 @@ function isIpAddress(hostname) {
  * Check for suspicious TLD
  */
 function checkSuspiciousTld(hostname) {
+  // Whitelist legitimate country-specific and org TLDs
+  const legitimateTLDs = [
+    '.gov.in', '.org.in', '.co.in', '.ac.in', '.edu.in',
+    '.gov.uk', '.gov.au', '.gov',
+    '.org', '.edu', '.ac.uk',
+    '.com', '.net', '.in', '.uk', '.us', '.ca', '.au'
+  ];
+  
+  // Check if domain ends with legitimate TLD
+  for (const legitTld of legitimateTLDs) {
+    if (hostname.endsWith(legitTld)) {
+      return { suspicious: false };
+    }
+  }
+  
+  // Now check for suspicious TLDs
   for (const tld of SUSPICIOUS_TLDS) {
     if (hostname.endsWith(tld)) {
       return { suspicious: true, tld: tld };
     }
   }
+  
   return { suspicious: false };
 }
 
@@ -277,18 +397,38 @@ function countSubdomains(hostname) {
 function isLookAlikeDomain(hostname) {
   const cleanHost = hostname.toLowerCase().replace(/^www\./, '');
   
+  // First check if it's actually a trusted domain
   for (const trusted of TRUSTED_DOMAINS) {
-    // Check for character substitution
-    if (hasLookAlikeCharacters(cleanHost, trusted)) {
-      return true;
+    if (cleanHost === trusted || cleanHost.endsWith('.' + trusted)) {
+      return false; // It's the real domain, not a look-alike
+    }
+  }
+  
+  // Now check for impersonation attempts
+  for (const trusted of TRUSTED_DOMAINS) {
+    const brand = trusted.split('.')[0]; // e.g., 'google' from 'google.com'
+    
+    // Skip very short brand names to avoid false positives
+    if (brand.length < 4) continue;
+    
+    // Check for character substitution (only if brand name is in hostname)
+    if (cleanHost.includes(brand)) {
+      if (hasLookAlikeCharacters(cleanHost, trusted)) {
+        return true;
+      }
     }
     
-    // Check for brand name in subdomain
+    // Check for brand name in subdomain (but not as main domain)
     const domainParts = cleanHost.split('.');
     if (domainParts.length > 2) {
+      // Only flag if brand is in subdomain AND main domain is suspicious
       for (let i = 0; i < domainParts.length - 2; i++) {
-        if (domainParts[i].includes(trusted.split('.')[0])) {
-          return true; // e.g., paypal.fake-site.com
+        if (domainParts[i] === brand || domainParts[i].includes(brand)) {
+          // Check if the actual domain (last two parts) is NOT the trusted domain
+          const actualDomain = domainParts.slice(-2).join('.');
+          if (actualDomain !== trusted) {
+            return true; // e.g., paypal.fake-site.com
+          }
         }
       }
     }
@@ -351,8 +491,23 @@ function checkSuspiciousCharacters(url) {
  */
 function findSuspiciousKeywords(url) {
   const found = [];
+  
+  // Don't flag common legitimate keywords from trusted domains
+  const urlLower = url.toLowerCase();
+  
   for (const keyword of SUSPICIOUS_KEYWORDS) {
-    if (url.includes(keyword)) {
+    // Only flag if keyword appears in a suspicious context
+    // Not if it's part of a trusted domain
+    let isInTrustedContext = false;
+    
+    for (const trusted of TRUSTED_DOMAINS) {
+      if (urlLower.includes(trusted)) {
+        isInTrustedContext = true;
+        break;
+      }
+    }
+    
+    if (!isInTrustedContext && urlLower.includes(keyword)) {
       found.push(keyword);
     }
   }
