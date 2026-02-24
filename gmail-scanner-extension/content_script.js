@@ -47,11 +47,13 @@ function displayResult(emailBodyElement, state, apiResult = null) {
       const spamPercent = Math.round(apiResult.spam_probability * 100);
       const spamReason = getSpamReason(apiResult);
       const spamKeywords = formatKeywords(apiResult.suspicious_keywords);
+      const spamUrlWarning = getUrlWarning(apiResult);
       chip.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 4px;">
           <div style="font-weight: 600;">⚠️ Likely Spam (${spamPercent}%)</div>
           <div style="font-size: 10px; font-weight: 400; opacity: 0.9;">Reason: ${spamReason}</div>
           ${spamKeywords ? `<div style="font-size: 10px; font-weight: 400; opacity: 0.85;">Key Words: ${spamKeywords}</div>` : ''}
+          ${spamUrlWarning ? `<div style="font-size: 10px; font-weight: 500; opacity: 1; color: #d32f2f; margin-top: 2px;">${spamUrlWarning}</div>` : ''}
         </div>
       `;
       chip.style.backgroundColor = "#ffcdd2";
@@ -126,6 +128,23 @@ function formatKeywords(keywords) {
   return displayKeywords.join(", ");
 }
 
+function getUrlWarning(apiResult) {
+  if (!apiResult || !apiResult.urlAnalysis) return "";
+  
+  const urlAnalysis = apiResult.urlAnalysis;
+  if (!urlAnalysis.isFishy) return "";
+  
+  if (urlAnalysis.riskLevel === 'critical') {
+    return `🚨 DANGER: ${urlAnalysis.suspiciousUrls.length} phishing URL(s)!`;
+  } else if (urlAnalysis.riskLevel === 'high') {
+    return `⚠️ WARNING: ${urlAnalysis.suspiciousUrls.length} suspicious URL(s)`;
+  } else if (urlAnalysis.riskLevel === 'medium') {
+    return `⚠️ ${urlAnalysis.suspiciousUrls.length} potentially unsafe URL(s)`;
+  }
+  
+  return "";
+}
+
 // --- Get Email Subject ---
 function getEmailSubject() {
   const subjectElement = document.querySelector('h2.hP');
@@ -157,6 +176,7 @@ async function scanEmail(emailBodyElement) {
 
   const emailBody = emailBodyElement.innerText.trim();
   const emailSubject = getEmailSubject();
+  const emailHtml = emailBodyElement.innerHTML;
 
   // Skip very short emails
   if (emailBody.length < 50 && emailSubject.length < 10) {
@@ -172,6 +192,12 @@ async function scanEmail(emailBodyElement) {
     console.log("📧 Sending email to server for analysis...");
     console.log("Subject:", emailSubject.substring(0, 50));
     console.log("Body length:", emailBody.length);
+
+    // ============= URL PHISHING DETECTION =============
+    console.log("🔗 Checking URLs for phishing...");
+    const urlAnalysis = window.urlPhishingDetector.detectPhishingUrls(emailHtml, emailBody);
+    console.log("URL Analysis:", urlAnalysis);
+    // ==================================================
 
     // Call FastAPI server
     const response = await fetch(API_URL, {
@@ -197,7 +223,24 @@ async function scanEmail(emailBodyElement) {
       throw new Error(result.message || "Server returned an error");
     }
 
-    // Display result based on server response
+    // ============= COMBINE SPAM + URL ANALYSIS =============
+    // If URLs are fishy, upgrade risk level
+    if (urlAnalysis.isFishy) {
+      console.log("🚨 Phishing URLs detected!");
+      
+      // Add URL warnings to result
+      result.urlAnalysis = urlAnalysis;
+      
+      // Increase spam probability if phishing URLs detected
+      if (urlAnalysis.riskLevel === 'critical' || urlAnalysis.riskLevel === 'high') {
+        result.spam_probability = Math.max(result.spam_probability, 0.8);
+        result.result = "SPAM";
+        result.confidence = "HIGH";
+      }
+    }
+    // ======================================================
+
+    // Display result based on server response + URL analysis
     const isSpam = result.result === "SPAM";
     displayResult(emailBodyElement, isSpam ? "spam" : "safe", result);
 

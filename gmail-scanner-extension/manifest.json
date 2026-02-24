@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://mail.google.com/*"],
-      "js": ["content_script.js"]
+      "js": ["url_phishing_detector.js", "content_script.js"]
     }
   ]
 }
